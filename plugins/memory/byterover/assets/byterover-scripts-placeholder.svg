@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Placeholder: ByteRover skill scripts directory</title>
+  <desc id="desc">Placeholder image for a terminal listing ByteRover mono skill scripts.</desc>
+  <rect width="1200" height="675" fill="#f8fafc"/>
+  <rect x="70" y="62" width="1060" height="550" rx="18" fill="#0f172a"/>
+  <circle cx="112" cy="98" r="10" fill="#ef4444"/>
+  <circle cx="146" cy="98" r="10" fill="#f59e0b"/>
+  <circle cx="180" cy="98" r="10" fill="#22c55e"/>
+  <text x="110" y="166" font-family="Menlo, Consolas, monospace" font-size="24" fill="#e2e8f0">$ ls ~/.hermes/skills/byterover/scripts</text>
+  <text x="110" y="220" font-family="Menlo, Consolas, monospace" font-size="24" fill="#93c5fd">brv.mjs</text>
+  <text x="110" y="260" font-family="Menlo, Consolas, monospace" font-size="24" fill="#93c5fd">recall.mjs</text>
+  <text x="110" y="300" font-family="Menlo, Consolas, monospace" font-size="24" fill="#93c5fd">record.mjs</text>
+  <text x="110" y="360" font-family="Menlo, Consolas, monospace" font-size="24" fill="#94a3b8">...</text>
+  <rect x="110" y="430" width="860" height="96" rx="10" fill="#1e293b" stroke="#64748b" stroke-dasharray="12 10" stroke-width="3"/>
+  <text x="142" y="486" font-family="Arial, sans-serif" font-size="26" fill="#e2e8f0">TODO: replace with terminal screenshot</text>
+  <text x="142" y="520" font-family="Arial, sans-serif" font-size="20" fill="#94a3b8">Show recall.mjs, record.mjs, and brv.mjs.</text>
+</svg>
