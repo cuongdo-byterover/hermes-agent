@@ -13,42 +13,95 @@ scripts (`recall.mjs`, `record.mjs`, `brv.mjs`) as one-shot subprocesses.
 | `prefetch(query)` | Runs `node recall.mjs "<query>" --cwd $HERMES_HOME/byterover/ --limit 5`. Returns a `<byterover-context>` block with the matched topics' rendered HTML, or empty if nothing relevant. |
 | `brv_record` tool | Agent calls this with `{path, html, overwrite?}`. The plugin shells `node record.mjs <path> --html '<bv-topic …>…</bv-topic>'`. record.mjs is one-shot — no kickoff/continuation session. |
 
-**Storage location.** Hermes runs every subprocess from `$HERMES_HOME/byterover/`.
-Mono's centralized layout resolves that cwd to
-`~/.brv/projects/<flat-of-cwd>/context-tree/`. So memory persists at
-e.g. `~/.brv/projects/-Users-you-.hermes-byterover/context-tree/`, NOT
-inside the Hermes profile dir.
+**Storage workspace.** Hermes runs every mono subprocess from
+`$HERMES_HOME/byterover/`. ByteRover resolves the context tree from that cwd
+through its space registry; the actual tree lives under the ByteRover data dir,
+not under the Hermes plugin directory. If no space is bound yet, create one in
+the ByteRover desktop app, then bind `$HERMES_HOME/byterover/` with
+`space.mjs bind`.
 
-## Install
-
-You need:
+## Requirements
 
 1. **Node.js** on `PATH` (any modern version).
-2. **The byterover-mono `scripts/` directory** somewhere on disk. The
-   plugin auto-discovers it in this order:
+2. **The assembled ByteRover skill** at `$HERMES_HOME/skills/byterover/`.
+   Hermes expects this final layout:
 
-   1. `$BYTEROVER_MONO_SCRIPTS_DIR` — explicit override.
-   2. `~/.openclaw/skills/byterover/scripts/` — if you have the byterover
-      skill installed for OpenClaw, this is the standard location.
-   3. `~/workspaces/byterover-mono/skills/byterover/scripts/` — dev
-      fallback for byterover-mono checkouts.
+```text
+$HERMES_HOME/skills/byterover/
+├── SKILL.md
+└── scripts/
+    ├── recall.mjs
+    ├── record.mjs
+    └── brv.mjs
+```
 
-If you have neither openclaw nor a byterover-mono checkout:
+## Install the skill
+
+The Hermes plugin does not consume `apps/skill` directly. In
+`byterover-mono`, `apps/skill` is the private source app: hand-authored docs
+live in `apps/skill/skill/`, runtime entry points live in
+`apps/skill/src/entries/`, and `pnpm build:skill` assembles the generated,
+installable artifact at `skills/byterover/`.
+
+Released builds are published to the public `campfirein/skills` repo for
+`skills.sh` consumers:
+
+```bash
+# latest released skill
+npx skills add campfirein/skills
+
+# pinned release
+npx skills add campfirein/skills@skill-vX.Y.Z
+```
+
+Whichever install path you use, the final directory must be available to
+Hermes as `$HERMES_HOME/skills/byterover/`. For a source checkout:
 
 ```bash
 git clone https://github.com/campfirein/byterover-mono.git ~/workspaces/byterover-mono
 cd ~/workspaces/byterover-mono
 pnpm install && pnpm build:skill
+
+mkdir -p "${HERMES_HOME:-$HOME/.hermes}/skills"
+ln -s "$PWD/skills/byterover" \
+  "${HERMES_HOME:-$HOME/.hermes}/skills/byterover"
 ```
 
-That produces `~/workspaces/byterover-mono/skills/byterover/scripts/`,
-which the plugin finds at the dev-fallback path.
+Use a copy instead of a symlink if you want a fixed snapshot. The source app
+can also publish the same generated artifact with `pnpm publish:skill`, which
+mirrors `skills/byterover/` into `campfirein/skills` and tags it as
+`skill-vX.Y.Z`.
 
-To use a custom location:
+## Setup
 
 ```bash
-export BYTEROVER_MONO_SCRIPTS_DIR=/path/to/your/scripts
+hermes memory setup    # select "byterover"
 ```
+
+Or manually:
+
+```bash
+hermes config set memory.provider byterover
+```
+
+If ByteRover reports that no context tree is bound for the Hermes workspace,
+bind the cwd used by this plugin:
+
+```bash
+mkdir -p "${HERMES_HOME:-$HOME/.hermes}/byterover"
+cd "${HERMES_HOME:-$HOME/.hermes}/byterover"
+node "${HERMES_HOME:-$HOME/.hermes}/skills/byterover/scripts/space.mjs" bind "Hermes"
+```
+
+Spaces are provisioned in the ByteRover desktop app; `space.mjs bind` links
+this Hermes workspace to one of those spaces.
+
+## Config
+
+| Env Var | Required | Description |
+|---------|----------|-------------|
+| `BYTEROVER_MONO_SCRIPTS_DIR` | No | Override the scripts directory. Use only when the skill is not installed at `$HERMES_HOME/skills/byterover/scripts`. |
+| `BRV_DATA_DIR` | No | Override ByteRover's data directory; normally leave unset and let the bundled scripts resolve it. |
 
 ## What the agent sees
 
@@ -95,6 +148,7 @@ agent should surface.
 | `BRV_API_KEY` env var | removed (no remote auth) |
 
 If you have an existing tree at `$HERMES_HOME/byterover/.brv/context-tree/`
-(cli layout), the mono build will NOT read it — mono's storage lives at
-`~/.brv/projects/<flat>/context-tree/`. Migrate by re-recording the topics
-into the new location, or stay on the v1.x cli plugin until you've migrated.
+(cli layout), the mono build will NOT read it automatically. Mono resolves the
+active tree through the workspace's bound ByteRover space under the ByteRover
+data dir. Migrate by re-recording the topics into the bound space, or stay on
+the v1.x cli plugin until you've migrated.
