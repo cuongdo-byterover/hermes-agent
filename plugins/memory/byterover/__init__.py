@@ -3,18 +3,18 @@
 Replaces the cli-binary backend with byterover-mono's bundled .mjs scripts
 (``recall.mjs``, ``record.mjs``, ``brv.mjs``).  No more ``brv curate``
 session protocol — record is one-shot via ``--html``.  Storage is
-centralized at ``~/.brv/projects/<flat-of-cwd>/context-tree/``, resolved
-automatically by mono when we set the subprocess cwd to
-``$HERMES_HOME/byterover/``.
+resolved by ByteRover's space registry from the subprocess cwd; Hermes uses
+``$HERMES_HOME/byterover/`` as that workspace cwd, and the bound tree lives
+under ByteRover's data dir.
 
 Per-question integration decisions (carried over from the planning round):
 
 - **Scripts location**: env override ``BYTEROVER_MONO_SCRIPTS_DIR`` →
   the Hermes-native skill install at ``$HERMES_HOME/skills/byterover/scripts/``.
   (No ``.openclaw`` or dev-workspace fallback — Hermes ships its own copy.)
-- **System prompt block**: ships the full curate guidance every turn — same
-  ~11KB content the openclaw plugin uses, ported to Hermes' tool-call shape
-  (calls ``brv_record`` instead of shelling ``node record.mjs``).
+- **System prompt block**: ships the current ByteRover skill curation rules
+  every turn, ported to Hermes' tool-call shape (calls ``brv_record`` instead
+  of shelling ``node record.mjs``).
 - **Tool name**: ``brv_record`` (not ``brv_curate``).  Mono's primitive is
   ``record.mjs``; the tool name should be honest about it.
 - **Curation model**: agent-tool-driven only.  No ``on_pre_compress``,
@@ -45,7 +45,6 @@ logger = logging.getLogger(__name__)
 
 _RECALL_TIMEOUT_S = 10
 _RECORD_TIMEOUT_S = 30
-_INIT_TIMEOUT_S = 5
 _MIN_QUERY_LEN = 5
 _RECALL_LIMIT = 5
 
@@ -86,9 +85,9 @@ def _get_byterover_cwd() -> Path:
     """Profile-scoped working directory for mono.
 
     Hermes runs all mono subprocesses from ``$HERMES_HOME/byterover/``.
-    Mono's ``resolveContextRoot`` then maps that cwd to
-    ``~/.brv/projects/<flat-of-cwd>/context-tree/`` automatically.  Storage
-    is centralized; the cwd just identifies the project.
+    Mono's ``resolveContextRoot`` maps that cwd through ByteRover's space
+    registry. The context tree itself lives under ByteRover's data dir; this
+    cwd is the stable Hermes workspace identity.
     """
     from hermes_constants import get_hermes_home
     return get_hermes_home() / "byterover"
@@ -255,7 +254,7 @@ per topic and pass it as the `html` arg.
   "name": "brv_record",
   "arguments": {
     "path": "security/auth",
-    "html": "<bv-topic path=\\"security/auth\\" title=\\"Login flow\\" summary=\\"How users authenticate\\" keywords=\\"oauth,session,tokens\\" tags=\\"auth,security\\"><bv-task>End-user authentication design.</bv-task><bv-decision id=\\"d-oauth\\">Use OAuth 2.0 with PKCE.</bv-decision><bv-reason>Third-party identity providers handle credential storage; gateway handles refresh.</bv-reason><bv-rule severity=\\"must\\">Tokens MUST be short-lived; refresh handled by the gateway, not the client.</bv-rule><bv-fact subject=\\"auth_provider\\" category=\\"project\\" value=\\"OAuth 2.0 with PKCE\\">Production uses OAuth 2.0 with PKCE.</bv-fact></bv-topic>"
+    "html": "<bv-topic path=\\"security/auth\\" title=\\"Login flow\\" summary=\\"How users authenticate\\" keywords=\\"oauth,session,tokens\\" tags=\\"auth,security\\"><bv-reason>Authentication decisions affect credential custody and token handling across clients.</bv-reason><bv-task>End-user authentication design.</bv-task><bv-decision id=\\"d-oauth\\">Use OAuth 2.0 with PKCE.</bv-decision><bv-rule severity=\\"must\\">Tokens MUST be short-lived; refresh is handled by the gateway, not the client.</bv-rule><bv-fact subject=\\"auth_provider\\" category=\\"project\\" value=\\"OAuth 2.0 with PKCE\\" disclosure=\\"public\\">Production uses OAuth 2.0 with PKCE.</bv-fact></bv-topic>"
   }
 }
 ```
@@ -337,11 +336,16 @@ the specialized elements below instead.
 
 # Required structure (every topic you record)
 
-1. A scoping element: `<bv-task>` (or `<h1>` + intro paragraph).
-2. At least one structural element from:
+1. A `<bv-reason>` explaining the WHY of this curation. Missing this is the
+   most common authoring failure.
+2. A scoping element: `<bv-task>` (or `<h1>` + intro paragraph).
+3. At least one structural element beyond the task from:
    `<bv-decision>`, `<bv-bug>`, `<bv-fix>`, `<bv-changes>`, `<bv-files>`,
    `<bv-flow>`, `<bv-structure>`, `<bv-dependencies>`, `<bv-highlights>`,
    `<bv-pattern>`, `<bv-examples>`, `<bv-diagram>`.
+4. `<bv-timestamp>` in ISO 8601 if the content has a reference date.
+5. One `<bv-fact subject="snake_case" category="..." value="...">canonical
+   statement</bv-fact>` for each discrete queryable fact.
 
 A topic containing ONLY `<bv-fact>` siblings is a placeholder. Same goes
 for ONLY `<bv-highlights><li>...</li></bv-highlights>` — that's flat, not
@@ -363,7 +367,39 @@ structured.
 
 ## NEVER author these (system-managed; writer rejects them)
 
-`importance`, `maturity`, `recency`, `createdat`, `updatedat`.
+`createdat`, `updatedat`, `id`, `importance`, `maturity`, `recency`.
+
+# Output contract (hard rules)
+
+- All attribute values are double-quoted strings, not single-quoted.
+- All attribute names are lowercase.
+- Path segments are snake_case with underscores between words:
+  `security/oauth_pkce`, NOT `security/oauth-pkce`.
+- `related=` uses `@path.html` for file targets and `@path` for folder/domain
+  targets. The `@` prefix is required.
+- The `html` argument is bare HTML: first character `<`, last characters
+  `</bv-topic>`. No code fence wrapper.
+- Do not invent custom elements outside the 19-element `<bv-*>` vocabulary, or
+  attributes outside each element's documented schema.
+
+# Sensitivity — mark facts you intend to share
+
+A topic can be shared at three views: full, redacted, and metadata. Mark a fact
+you intend to share with `disclosure="public"`; otherwise the fact defaults to
+restricted and is stripped from the redacted view.
+
+- `<bv-fact>` is the sole unit of per-item restriction.
+- Topic `title` and prose text inside `<bv-structure>`, `<bv-flow>`,
+  `<bv-highlights>`, etc. are public-by-contract; never put secrets there.
+- Absent or misspelled `disclosure` is treated as restricted.
+- `<bv-topic visibility>` does NOT make facts public; redaction consults each
+  fact's own `disclosure` attribute.
+
+# Record form used by Hermes
+
+Mono supports a simple CLI record form (`--title --body`) and the rich form
+(`--html`). Hermes exposes only the rich form through `brv_record`, so always
+author the full `<bv-topic>...</bv-topic>` HTML yourself.
 
 # Preservation (when the user gave you primary-source material)
 
@@ -471,22 +507,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
         self._scripts_dir = _resolve_scripts_dir()
         self._curate_guidance = _build_curate_guidance(self._scripts_dir)
         self._cwd.mkdir(parents=True, exist_ok=True)
-
-        # Ensure mono has a central tree for this cwd. brv.mjs init is
-        # idempotent — safe to call every session.
-        init_result = _run_mono(
-            "brv.mjs",
-            ["init"],
-            timeout=_INIT_TIMEOUT_S,
-            cwd=self._cwd,
-        )
-        if not init_result["success"]:
-            logger.warning(
-                "byterover-mono init failed (best-effort, plugin continues): %s",
-                init_result.get("error"),
-            )
-        else:
-            logger.debug("byterover-mono initialized for cwd=%s", self._cwd)
+        logger.debug("byterover-mono cwd prepared for cwd=%s", self._cwd)
 
     def system_prompt_block(self) -> str:
         """Return the full curate guidance every turn (per the integration
@@ -539,7 +560,7 @@ class ByteRoverMemoryProvider(MemoryProvider):
         """Route brv_record tool calls to record.mjs.
 
         Returns a JSON string. record.mjs's stdout is already a JSON
-        envelope (`{ok: true, data: {created, filePath, warnings}}` on
+        envelope (`{ok: true, data: {created, path, warnings}}` on
         success, `{ok: false, error: "..."}` on failure), so we return its
         output verbatim. Any subprocess-level failure is wrapped in the
         same envelope shape so the agent sees a consistent contract.

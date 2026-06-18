@@ -9,7 +9,7 @@ scripts (`recall.mjs`, `record.mjs`, `brv.mjs`) as one-shot subprocesses.
 
 | Hermes hook | What this plugin does |
 |---|---|
-| `system_prompt_block()` | Returns the full curate guidance (~8.5KB) every turn — IRON LAW + 19-element `<bv-*>` vocabulary + structural rules + the `brv_record` tool contract |
+| `system_prompt_block()` | Returns the current curate guidance every turn — IRON LAW + 19-element `<bv-*>` vocabulary + structural rules + the `brv_record` tool contract |
 | `prefetch(query)` | Runs `node recall.mjs "<query>" --cwd $HERMES_HOME/byterover/ --limit 5`. Returns a `<byterover-context>` block with the matched topics' rendered HTML, or empty if nothing relevant. |
 | `brv_record` tool | Agent calls this with `{path, html, overwrite?}`. The plugin shells `node record.mjs <path> --html '<bv-topic …>…</bv-topic>'`. record.mjs is one-shot — no kickoff/continuation session. |
 
@@ -130,7 +130,7 @@ guessing what to save from raw message text; the agent picks better.
 Returns the JSON envelope from `record.mjs` verbatim:
 
 ```json
-{ "ok": true, "data": { "created": true, "filePath": "...", "warnings": [] } }
+{ "ok": true, "data": { "created": true, "path": "...", "warnings": [] } }
 ```
 
 On `ok: false`, the `error` field carries a human-readable message the
